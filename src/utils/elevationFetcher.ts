@@ -10,10 +10,19 @@ interface ApiResult {
   location: { lat: number; lng: number };
 }
 
+function isPlaceholderApiBase(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'api.example.com';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Fetch a single batch of up to 100 locations ─────────────────────
 
 async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
-  if (API_BASE.includes('api.example.com')) {
+  if (isPlaceholderApiBase(API_BASE)) {
     throw new Error(
       'VITE_API_BASE_URL points to the placeholder api.example.com. Configure a real elevation API endpoint.',
     );
