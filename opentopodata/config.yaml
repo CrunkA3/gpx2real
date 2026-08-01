@@ -1,0 +1,7 @@
+max_locations_per_request: 100
+
+datasets:
+  - name: srtm90m
+    path: data/srtm90m/
+    filename_epsg: 4326
+    filename_tile_size: 1

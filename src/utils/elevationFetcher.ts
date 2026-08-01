@@ -12,8 +12,21 @@ interface ApiResult {
 
 function isPlaceholderApiBase(url: string): boolean {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, window.location.origin);
     return parsed.hostname === 'api.example.com';
+  } catch {
+    return false;
+  }
+}
+
+function isValidApiBase(url: string): boolean {
+  if (url.startsWith('/')) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
   } catch {
     return false;
   }
@@ -27,9 +40,14 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
       'VITE_API_BASE_URL points to the placeholder api.example.com. Configure a real elevation API endpoint.',
     );
   }
+  if (!isValidApiBase(API_BASE)) {
+    throw new Error(
+      'VITE_API_BASE_URL must be an absolute URL (scheme://) or a root-relative path starting with "/".',
+    );
+  }
 
   const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
-  const base = new URL(API_BASE);
+  const base = new URL(API_BASE, window.location.origin);
   base.searchParams.set('locations', locations);
   const url = base.toString();
 
