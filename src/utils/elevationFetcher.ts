@@ -1,6 +1,7 @@
 import type { BoundingBox, ElevationGrid, GridResolution } from '../types';
 
-const API_BASE = 'https://api.opentopodata.org/v1/srtm30m';
+const API_BASE =
+  import.meta.env.VITE_API_BASE_URL || 'https://api.opentopodata.org/v1/srtm30m';
 const BATCH_SIZE = 100;
 const RATE_LIMIT_MS = 1100; // 1 request/second + buffer
 
