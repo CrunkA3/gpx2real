@@ -122,7 +122,7 @@ export function buildTerrainMesh(
 
   // ── Indices ──
   const faceCount = (N - 1) * (N - 1) * 2;
-  const indices = new Uint32Array(faceCount * 3);
+  const indices = new Uint16Array(faceCount * 3);
   let fi = 0;
   for (let row = 0; row < N - 1; row++) {
     for (let col = 0; col < N - 1; col++) {
