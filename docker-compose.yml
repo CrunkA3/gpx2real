@@ -1,6 +1,6 @@
 services:
   opentopodata:
-    image: ajnisbet/opentopodata:latest
+    image: ajnisbet/opentopodata:1.7.0
     volumes:
       - ./opentopodata/data:/app/data:ro
       - ./opentopodata/config.yaml:/app/config.yaml:ro

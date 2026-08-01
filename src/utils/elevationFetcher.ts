@@ -19,12 +19,30 @@ function isPlaceholderApiBase(url: string): boolean {
   }
 }
 
+function isValidApiBase(url: string): boolean {
+  if (url.startsWith('/')) {
+    return true;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Fetch a single batch of up to 100 locations ─────────────────────
 
 async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
   if (isPlaceholderApiBase(API_BASE)) {
     throw new Error(
       'VITE_API_BASE_URL points to the placeholder api.example.com. Configure a real elevation API endpoint.',
+    );
+  }
+  if (!isValidApiBase(API_BASE)) {
+    throw new Error(
+      'VITE_API_BASE_URL must be an absolute URL (scheme://) or a root-relative path starting with "/".',
     );
   }
 
