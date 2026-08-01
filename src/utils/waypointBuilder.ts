@@ -76,7 +76,12 @@ function makeTextSprite(text: string, scale: number): THREE.Sprite {
   const ctx = canvas.getContext('2d')!;
 
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.roundRect(2, 2, 252, 60, 8);
+  ctx.beginPath();
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(2, 2, 252, 60, 8);
+  } else {
+    ctx.rect(2, 2, 252, 60);
+  }
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
