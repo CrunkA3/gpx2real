@@ -3,8 +3,13 @@ import type { GPXData, GPXPoint, GPXWaypoint, GPXTrack, BoundingBox } from '../t
 // ─── GPX Parser ─────────────────────────────────────────────────────
 
 function parsePoint(el: Element): GPXPoint {
-  const lat = parseFloat(el.getAttribute('lat') ?? '0');
-  const lon = parseFloat(el.getAttribute('lon') ?? '0');
+  const latStr = el.getAttribute('lat');
+  const lonStr = el.getAttribute('lon');
+  const lat = latStr != null ? Number(latStr) : NaN;
+  const lon = lonStr != null ? Number(lonStr) : NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    throw new Error('Invalid GPX file: point missing or invalid lat/lon');
+  }
   const eleEl = el.querySelector('ele');
   const timeEl = el.querySelector('time');
   return {
