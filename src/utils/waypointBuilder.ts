@@ -46,7 +46,7 @@ export function buildWaypointMeshes(
   for (const wp of waypoints) {
     const terrainEle = sampleGrid(grid, wp.lat, wp.lon);
     // Place waypoints at the same vertical level as tracks
-    const ele = terrainEle + Math.abs(trackOffset) + settings.size * 0.5;
+    const ele = terrainEle + trackOffset + settings.size * 0.5;
     const [x, y, z] = geoToLocal(cs, wp.lat, wp.lon, ele);
 
     const geo = makeGeometry(settings.shape, settings.size);
