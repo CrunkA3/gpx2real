@@ -69,7 +69,14 @@ export default function App() {
       setGrid(elevGrid);
       setLoading({ status: 'ready' });
     } catch (err) {
-      setLoading({ status: 'error', message: String(err instanceof Error ? err.message : err) });
+      const message = String(err instanceof Error ? err.message : err);
+      console.error('[gpx2real] Failed to load GPX file', {
+        fileName: file.name,
+        fileSize: file.size,
+        resolution: settings.terrain.resolution,
+        error: err,
+      });
+      setLoading({ status: 'error', message });
     }
   }, [settings.terrain.resolution]);
 
@@ -85,7 +92,12 @@ export default function App() {
       setGrid(elevGrid);
       setLoading({ status: 'ready' });
     } catch (err) {
-      setLoading({ status: 'error', message: String(err instanceof Error ? err.message : err) });
+      const message = String(err instanceof Error ? err.message : err);
+      console.error('[gpx2real] Failed to reload terrain', {
+        resolution: settings.terrain.resolution,
+        error: err,
+      });
+      setLoading({ status: 'error', message });
     }
   }, [gpxData, settings.terrain.resolution]);
 
