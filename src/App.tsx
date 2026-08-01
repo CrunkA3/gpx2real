@@ -28,7 +28,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   track: {
     offset: 10,
     width: 10,
-    colorByTrack: true,
   },
   waypoint: {
     shape: 'sphere',

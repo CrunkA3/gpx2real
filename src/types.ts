@@ -52,7 +52,6 @@ export interface TrackSettings {
   offset: number;
   /** Tube radius in metres */
   width: number;
-  colorByTrack: boolean;
 }
 
 export interface WaypointSettings {
