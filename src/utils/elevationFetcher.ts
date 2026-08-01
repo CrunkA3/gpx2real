@@ -29,7 +29,9 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
   }
 
   const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
-  const url = `${API_BASE}?locations=${encodeURIComponent(locations)}`;
+  const base = new URL(API_BASE);
+  base.searchParams.set('locations', locations);
+  const url = base.toString();
 
   let res: Response;
   try {
