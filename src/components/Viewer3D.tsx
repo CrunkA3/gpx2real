@@ -146,11 +146,12 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
       group.remove(child);
       if (child instanceof THREE.Mesh || child instanceof THREE.Sprite) {
         child.geometry?.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach((m) => m.dispose());
-        } else {
-          (child.material as THREE.Material)?.dispose();
-        }
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((m) => {
+          const anyM = m as unknown as { map?: THREE.Texture };
+          anyM.map?.dispose();
+          m.dispose();
+        });
       }
     }
   }, []);
