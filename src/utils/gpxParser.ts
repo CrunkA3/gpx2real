@@ -88,11 +88,11 @@ export function computeBoundingBox(data: GPXData, paddingFraction = 0.1): Boundi
   };
 }
 
-/** Returns the min/max elevation from all track points that have non-zero elevation */
+/** Returns the min/max elevation from all points with a non-zero elevation (0 is often “unknown” in GPX). */
 export function getElevationRange(data: GPXData): { min: number; max: number } | null {
   const eles = [...data.tracks.flatMap((t) => t.points), ...data.waypoints]
     .map((p) => p.ele)
-    .filter((e) => e > 0);
+    .filter((e) => e !== 0 && Number.isFinite(e));
   if (eles.length === 0) return null;
   return { min: Math.min(...eles), max: Math.max(...eles) };
 }
