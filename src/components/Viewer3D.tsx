@@ -186,7 +186,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
         settings.waypoint,
         settings.track.offset,
       );
-      waypointsGroupRef.current.add(...wpGroup.children.map((c) => c.clone()));
+      waypointsGroupRef.current.add(...wpGroup.children);
     }
 
     // ── Fit camera to terrain ──
