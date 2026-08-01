@@ -12,7 +12,7 @@ interface ApiResult {
 
 function isPlaceholderApiBase(url: string): boolean {
   try {
-    const parsed = new URL(url);
+    const parsed = new URL(url, window.location.origin);
     return parsed.hostname === 'api.example.com';
   } catch {
     return false;
@@ -29,7 +29,7 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
   }
 
   const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
-  const base = new URL(API_BASE);
+  const base = new URL(API_BASE, window.location.origin);
   base.searchParams.set('locations', locations);
   const url = base.toString();
 
