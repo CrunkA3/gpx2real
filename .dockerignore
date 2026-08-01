@@ -7,4 +7,6 @@ docker-compose.yml
 README.md
 *.log
 .env
-.env.local
+.env.*
+!.env.example
+!.env.production.example
