@@ -13,7 +13,7 @@ interface ApiResult {
 
 async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
   const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
-  const url = `${API_BASE}?locations=${locations}`;
+  const url = `${API_BASE}?locations=${encodeURIComponent(locations)}`;
 
   const res = await fetch(url);
   if (!res.ok) {
