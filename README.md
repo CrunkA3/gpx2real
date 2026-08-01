@@ -11,7 +11,7 @@ cp .env.example .env
 cp .env.production.example .env.production
 ```
 
-Use `.env` for default/local Docker Compose values, and `.env.production` for production values.
+Use `.env` for default/local Docker Compose values, and `.env.production` for production values. Keep `.env.production` out of version control (add it to `.gitignore`) and exclude it from Docker build context (add it to `.dockerignore`).
 
 ### 2) Build and run
 
