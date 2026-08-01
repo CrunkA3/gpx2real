@@ -26,3 +26,13 @@ App will be available on `APP_PORT` (container serves on port `80`).
 ```bash
 docker compose --env-file .env.production down
 ```
+
+## Troubleshooting GPX upload errors
+
+- Upload/parsing/elevation fetch errors are shown in the UI and logged in the browser console (`F12`).
+- If you see `Failed to fetch`, verify `VITE_API_BASE_URL` points to a reachable elevation API (default: `https://api.opentopodata.org/v1/srtm30m`).
+- After changing `VITE_API_BASE_URL`, rebuild the container because it is a build-time variable:
+
+```bash
+docker compose --env-file .env.production up -d --build
+```

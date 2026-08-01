@@ -10,15 +10,47 @@ interface ApiResult {
   location: { lat: number; lng: number };
 }
 
+function isPlaceholderApiBase(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === 'api.example.com';
+  } catch {
+    return false;
+  }
+}
+
 // ─── Fetch a single batch of up to 100 locations ─────────────────────
 
 async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
-  const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
-  const url = `${API_BASE}?locations=${encodeURIComponent(locations)}`;
+  if (isPlaceholderApiBase(API_BASE)) {
+    throw new Error(
+      'VITE_API_BASE_URL points to the placeholder api.example.com. Configure a real elevation API endpoint.',
+    );
+  }
 
-  const res = await fetch(url);
+  const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
+  const base = new URL(API_BASE);
+  base.searchParams.set('locations', locations);
+  const url = base.toString();
+
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `Elevation API request failed for ${API_BASE}: ${reason}. Check network/CORS and VITE_API_BASE_URL.`,
+    );
+  }
+
   if (!res.ok) {
-    throw new Error(`Elevation API error: ${res.status} ${res.statusText}`);
+    const responseText = await res.text();
+    const detail = responseText.trim();
+    throw new Error(
+      `Elevation API error: ${res.status} ${res.statusText}${
+        detail ? ` (${detail.slice(0, 200)})` : ''
+      }`,
+    );
   }
 
   const json = (await res.json()) as { results: ApiResult[]; status: string };
