@@ -16,6 +16,10 @@ function makeGeometry(shape: WaypointSettings['shape'], size: number): THREE.Buf
       return new THREE.CylinderGeometry(size * 0.5, size * 0.5, size * 2, 12);
     case 'box':
       return new THREE.BoxGeometry(size * 1.5, size * 1.5, size * 1.5);
+    default: {
+      const _exhaustive: never = shape;
+      throw new Error(`Unsupported waypoint shape: ${_exhaustive}`);
+    }
   }
 }
 
