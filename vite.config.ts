@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
         '/elevation': {
           target: elevationProxyTarget,
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/elevation/, ''),
+          rewrite: (path) => path.replace(/^\/elevation/, '') || '/',
         },
       },
     },
