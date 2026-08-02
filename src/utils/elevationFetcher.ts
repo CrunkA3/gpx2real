@@ -1,7 +1,7 @@
 import type { BoundingBox, ElevationGrid, GridResolution } from '../types';
 
 const API_BASE =
-  import.meta.env.VITE_API_BASE_URL || 'https://api.opentopodata.org/v1/srtm30m';
+  import.meta.env.VITE_API_BASE_URL || '/elevation/v1/srtm30m';
 const BATCH_SIZE = 100;
 const RATE_LIMIT_MS = 1100; // 1 request/second + buffer
 
@@ -57,7 +57,7 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `Elevation API request failed for ${API_BASE}: ${reason}. Check network/CORS and VITE_API_BASE_URL.`,
+      `Elevation API request failed for ${API_BASE}: ${reason}. Check network/proxy and VITE_API_BASE_URL.`,
     );
   }
 
