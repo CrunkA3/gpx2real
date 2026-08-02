@@ -70,9 +70,11 @@ function isValidApiBase(url: string): boolean {
 
 // ─── Fetch a single batch of up to 100 locations ─────────────────────
 
-async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
+async function fetchBatch(
+  points: { lat: number; lon: number }[],
+  cache: Map<string, CachedElevation>,
+): Promise<number[]> {
   const now = Date.now();
-  const cache = loadCache();
   const cachedValues: (number | null)[] = new Array(points.length).fill(null);
   const missingPoints: { lat: number; lon: number }[] = [];
   const missingIndexes: number[] = [];
@@ -103,7 +105,7 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
     );
   }
 
-  const locations = missingPoints.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
+  const locations = missingPoints.map((p) => getPointKey(p.lat, p.lon)).join('|');
   const base = new URL(API_BASE, window.location.origin);
   base.searchParams.set('locations', locations);
   const url = base.toString();
@@ -183,10 +185,11 @@ export async function fetchElevationGrid(
   // Fetch in batches with rate limiting
   const elevations: number[] = [];
   let fetched = 0;
+  const cache = loadCache();
 
   for (let i = 0; i < points.length; i += BATCH_SIZE) {
     const batch = points.slice(i, i + BATCH_SIZE);
-    const results = await fetchBatch(batch);
+    const results = await fetchBatch(batch, cache);
     elevations.push(...results);
     fetched += batch.length;
     onProgress?.(fetched, total);
@@ -196,6 +199,9 @@ export async function fetchElevationGrid(
       await sleep(RATE_LIMIT_MS);
     }
   }
+
+  // Persist the pruned cache even when all points were served from cache
+  saveCache(cache);
 
   // Reshape to 2D array [row][col]
   const values: number[][] = [];
