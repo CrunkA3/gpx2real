@@ -15,7 +15,19 @@ Use `.env` for default/local Docker Compose values, and `.env.production` for pr
 
 By default, the app is configured to use a local OpenTopoData container via `/elevation/v1/srtm90m`.
 
-### 2) Build and run
+### 2) Build OpenTopoData image locally
+
+The Docker Hub tag `ajnisbet/opentopodata:1.7.0` is no longer available. Build OpenTopoData locally first:
+
+```bash
+git clone https://github.com/ajnisbet/opentopodata.git /tmp/opentopodata
+cd /tmp/opentopodata
+make build
+```
+
+Then set `OPENTOPODATA_IMAGE` in your Compose env file (`.env` for default/local runs, or `.env.production` when using `--env-file`) to the image tag produced by `make build` (confirm with `docker image ls`).
+
+### 3) Build and run
 
 ```bash
 docker compose --env-file .env.production up -d --build
@@ -23,7 +35,7 @@ docker compose --env-file .env.production up -d --build
 
 App will be available on `APP_PORT` (container serves on port `80`).
 
-### 3) Stop
+### 4) Stop
 
 ```bash
 docker compose --env-file .env.production down
