@@ -35,7 +35,9 @@ export interface BoundingBox {
 
 export type TerrainStyle = 'original' | 'lowpoly' | 'layers';
 export type GridResolution = 16 | 32 | 64;
+export type BaseShape = 'square' | 'hex' | 'round';
 export type WaypointShape = 'sphere' | 'cylinder' | 'box';
+export type TrackProfile = 'round' | 'square' | 'engraved';
 export type ExportFormat = 'glb' | 'stl' | 'obj';
 export type ExportScope = 'all' | 'terrain' | 'tracks' | 'waypoints';
 
@@ -45,6 +47,8 @@ export interface TerrainSettings {
   layerCount: number;
   verticalScale: number;
   wireframe: boolean;
+  baseShape: BaseShape;
+  baseDepth: number;
 }
 
 export interface TrackSettings {
@@ -52,6 +56,7 @@ export interface TrackSettings {
   offset: number;
   /** Tube radius in metres */
   width: number;
+  profile: TrackProfile;
 }
 
 export interface WaypointSettings {

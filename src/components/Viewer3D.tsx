@@ -174,6 +174,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
       cs,
       settings.track.offset,
       settings.track.width,
+      settings.track.profile,
     );
     trackMeshes.forEach((m) => tracksGroupRef.current.add(m));
 

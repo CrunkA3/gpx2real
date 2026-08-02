@@ -24,10 +24,13 @@ const DEFAULT_SETTINGS: AppSettings = {
     layerCount: 8,
     verticalScale: 1.0,
     wireframe: false,
+    baseShape: 'square',
+    baseDepth: 120,
   },
   track: {
-    offset: 10,
+    offset: 6,
     width: 10,
+    profile: 'square',
   },
   waypoint: {
     shape: 'sphere',
