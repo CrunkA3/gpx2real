@@ -93,7 +93,7 @@ export function buildTerrainMesh(
   const colors = new Float32Array(totalVertexCount * 3);
 
   const eleRange = maxEle - minEle || 1;
-  const baseY = -Math.max(settings.baseDepth, 1);
+const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
 
   for (let row = 0; row < N; row++) {
     for (let col = 0; col < N; col++) {
