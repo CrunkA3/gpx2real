@@ -56,7 +56,14 @@ export function buildTerrainMesh(
 
   const centerLat = (bbox.minLat + bbox.maxLat) / 2;
   const centerLon = (bbox.minLon + bbox.maxLon) / 2;
-  const cs = buildCoordSystem(centerLat, centerLon, minEle, settings.verticalScale);
+  const cs = buildCoordSystem(
+    centerLat,
+    centerLon,
+    minEle,
+    settings.verticalScale,
+    bbox,
+    settings.baseShape,
+  );
 
   // ── Choose effective resolution based on style ──
   const effectiveN = settings.style === 'lowpoly' ? Math.max(8, Math.floor(n / 4)) : n;
@@ -80,12 +87,13 @@ export function buildTerrainMesh(
 
   // ── Build BufferGeometry ──
   const N = effectiveN;
-  const vertexCount = N * N;
-  const positions = new Float32Array(vertexCount * 3);
-  const colors = new Float32Array(vertexCount * 3);
-  const uvs = new Float32Array(vertexCount * 2);
+  const topVertexCount = N * N;
+  const totalVertexCount = topVertexCount * 2;
+  const positions = new Float32Array(totalVertexCount * 3);
+  const colors = new Float32Array(totalVertexCount * 3);
 
   const eleRange = maxEle - minEle || 1;
+const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
 
   for (let row = 0; row < N; row++) {
     for (let col = 0; col < N; col++) {
@@ -96,12 +104,17 @@ export function buildTerrainMesh(
 
       const [x, y, z] = geoToLocal(cs, lat, lon, ele);
 
-      positions[idx * 3] = x;
-      positions[idx * 3 + 1] = y;
-      positions[idx * 3 + 2] = z;
+      const topPos = idx * 3;
+      const bottomIdx = idx + topVertexCount;
+      const bottomPos = bottomIdx * 3;
 
-      uvs[idx * 2] = col / (N - 1);
-      uvs[idx * 2 + 1] = 1 - row / (N - 1);
+      positions[topPos] = x;
+      positions[topPos + 1] = y;
+      positions[topPos + 2] = z;
+
+      positions[bottomPos] = x;
+      positions[bottomPos + 1] = baseY;
+      positions[bottomPos + 2] = z;
 
       // ── Per-vertex colour ──
       let c: THREE.Color;
@@ -114,37 +127,64 @@ export function buildTerrainMesh(
         c = elevationColor(t);
       }
 
-      colors[idx * 3] = c.r;
-      colors[idx * 3 + 1] = c.g;
-      colors[idx * 3 + 2] = c.b;
+      colors[topPos] = c.r;
+      colors[topPos + 1] = c.g;
+      colors[topPos + 2] = c.b;
+
+      colors[bottomPos] = c.r * 0.45;
+      colors[bottomPos + 1] = c.g * 0.45;
+      colors[bottomPos + 2] = c.b * 0.45;
     }
   }
 
-  // ── Indices ──
-  const faceCount = (N - 1) * (N - 1) * 2;
-  const indices = new Uint16Array(faceCount * 3);
-  let fi = 0;
+  const indexValues: number[] = [];
+
+  // ── Top faces ──
   for (let row = 0; row < N - 1; row++) {
     for (let col = 0; col < N - 1; col++) {
       const tl = row * N + col;
       const tr = tl + 1;
       const bl = tl + N;
       const br = bl + 1;
-      // Two triangles per quad (wound consistently)
-      indices[fi++] = tl;
-      indices[fi++] = bl;
-      indices[fi++] = tr;
-      indices[fi++] = tr;
-      indices[fi++] = bl;
-      indices[fi++] = br;
+      indexValues.push(tl, bl, tr, tr, bl, br);
     }
   }
+
+  // ── Bottom faces (reversed winding) ──
+  for (let row = 0; row < N - 1; row++) {
+    for (let col = 0; col < N - 1; col++) {
+      const tl = row * N + col + topVertexCount;
+      const tr = tl + 1;
+      const bl = tl + N;
+      const br = bl + 1;
+      indexValues.push(tl, tr, bl, tr, br, bl);
+    }
+  }
+
+  // ── Side walls along the outer ring ──
+  const perimeter: number[] = [];
+  for (let col = 0; col < N; col++) perimeter.push(col);
+  for (let row = 1; row < N; row++) perimeter.push(row * N + (N - 1));
+  for (let col = N - 2; col >= 0; col--) perimeter.push((N - 1) * N + col);
+  for (let row = N - 2; row > 0; row--) perimeter.push(row * N);
+
+  for (let i = 0; i < perimeter.length; i++) {
+    const aTop = perimeter[i];
+    const bTop = perimeter[(i + 1) % perimeter.length];
+    const aBottom = aTop + topVertexCount;
+    const bBottom = bTop + topVertexCount;
+    indexValues.push(aTop, bTop, aBottom, bTop, bBottom, aBottom);
+  }
+
+  const indexArray =
+    totalVertexCount > 65535
+      ? new Uint32Array(indexValues)
+      : new Uint16Array(indexValues);
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-  geo.setIndex(new THREE.BufferAttribute(indices, 1));
+  geo.setIndex(new THREE.BufferAttribute(indexArray, 1));
   geo.computeVertexNormals();
 
   const flatShading = settings.style === 'lowpoly' || settings.style === 'layers';

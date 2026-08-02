@@ -1,4 +1,11 @@
-import type { AppSettings, GridResolution, TerrainStyle, WaypointShape } from '../types';
+import type {
+  AppSettings,
+  BaseShape,
+  GridResolution,
+  TerrainStyle,
+  TrackProfile,
+  WaypointShape,
+} from '../types';
 
 interface Props {
   settings: AppSettings;
@@ -93,6 +100,28 @@ export default function ControlPanel({ settings, onChange }: Props) {
             onChange={(e) => setTerrain({ wireframe: e.target.checked })}
           />
         </Row>
+
+        <Row label="Base shape">
+          <select
+            value={settings.terrain.baseShape}
+            onChange={(e) => setTerrain({ baseShape: e.target.value as BaseShape })}
+          >
+            <option value="square">Square</option>
+            <option value="hex">Hexagon</option>
+            <option value="round">Round</option>
+          </select>
+        </Row>
+
+        <Row label={`Base depth: ${settings.terrain.baseDepth} m`}>
+          <input
+            type="range"
+            min={20}
+            max={500}
+            step={5}
+            value={settings.terrain.baseDepth}
+            onChange={(e) => setTerrain({ baseDepth: Number(e.target.value) })}
+          />
+        </Row>
       </Section>
 
       {/* ── Tracks ── */}
@@ -117,6 +146,17 @@ export default function ControlPanel({ settings, onChange }: Props) {
             value={settings.track.width}
             onChange={(e) => setTrack({ width: Number(e.target.value) })}
           />
+        </Row>
+
+        <Row label="Profile">
+          <select
+            value={settings.track.profile}
+            onChange={(e) => setTrack({ profile: e.target.value as TrackProfile })}
+          >
+            <option value="round">Round</option>
+            <option value="square">Square (printable)</option>
+            <option value="engraved">Engraved groove</option>
+          </select>
         </Row>
       </Section>
 
