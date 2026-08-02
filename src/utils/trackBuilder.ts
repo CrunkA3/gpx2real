@@ -20,6 +20,8 @@ const TRACK_COLORS = [
 // ─── Minimal tube segments to avoid GC pressure ──────────────────────
 
 const TUBE_SEGMENTS = 8;
+const MIN_POINT_SPACING_M = 0.75;
+const MAX_POINT_SPACING_M = 20;
 
 function buildPolylinePath(points: THREE.Vector3[]): THREE.CurvePath<THREE.Vector3> {
   const path = new THREE.CurvePath<THREE.Vector3>();
@@ -51,15 +53,42 @@ export function buildTrackMesh(
   color?: number,
 ): THREE.Mesh {
   const pts: THREE.Vector3[] = [];
-  const profileOffset = profile === 'engraved' ? -(widthM * 0.6) : 0;
+  const profileCenterOffset = profile === 'engraved' ? -(widthM * 0.6) : widthM;
+  const minSpacing = Math.max(MIN_POINT_SPACING_M, widthM * 0.5);
+  const maxSpacing = Math.max(MAX_POINT_SPACING_M, widthM * 1.5);
 
-  for (const pt of track.points) {
-    // Terrain height at this lat/lon
-    const terrainEle = sampleGrid(grid, pt.lat, pt.lon);
-    const effectiveEle = terrainEle + offsetM + profileOffset;
+  const toTrackPoint = (lat: number, lon: number) => {
+    const terrainEle = sampleGrid(grid, lat, lon);
+    const effectiveEle = terrainEle + offsetM + profileCenterOffset;
+    const [x, y, z] = geoToLocal(cs, lat, lon, effectiveEle);
+    return new THREE.Vector3(x, y, z);
+  };
 
-    const [x, y, z] = geoToLocal(cs, pt.lat, pt.lon, effectiveEle);
-    pts.push(new THREE.Vector3(x, y, z));
+  if (track.points.length > 0) {
+    pts.push(toTrackPoint(track.points[0].lat, track.points[0].lon));
+  }
+
+  for (let i = 1; i < track.points.length; i++) {
+    const prevSrc = track.points[i - 1];
+    const currSrc = track.points[i];
+    const prev = toTrackPoint(prevSrc.lat, prevSrc.lon);
+    const curr = toTrackPoint(currSrc.lat, currSrc.lon);
+    const distance = prev.distanceTo(curr);
+
+    if (distance < minSpacing) {
+      pts[pts.length - 1] = curr;
+      continue;
+    }
+
+    const inserts = Math.ceil(distance / maxSpacing) - 1;
+    for (let j = 1; j <= inserts; j++) {
+      const t = j / (inserts + 1);
+      const lat = prevSrc.lat + (currSrc.lat - prevSrc.lat) * t;
+      const lon = prevSrc.lon + (currSrc.lon - prevSrc.lon) * t;
+      pts.push(toTrackPoint(lat, lon));
+    }
+
+    pts.push(curr);
   }
 
   if (pts.length < 2) {
@@ -79,7 +108,10 @@ export function buildTrackMesh(
     }
   }
 
-  const path = buildPolylinePath(sampledPts);
+  const path =
+    sampledPts.length >= 3
+      ? new THREE.CatmullRomCurve3(sampledPts, false, 'centripetal', 0.5)
+      : buildPolylinePath(sampledPts);
   const steps = Math.min(sampledPts.length * 4, 4000);
   const geo =
     profile === 'round'
