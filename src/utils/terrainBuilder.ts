@@ -173,7 +173,7 @@ export function buildTerrainMesh(
     const bTop = perimeter[(i + 1) % perimeter.length];
     const aBottom = aTop + topVertexCount;
     const bBottom = bTop + topVertexCount;
-    indexValues.push(aTop, aBottom, bTop, bTop, aBottom, bBottom);
+    indexValues.push(aTop, bTop, aBottom, bTop, bBottom, aBottom);
   }
 
   const indexArray =
