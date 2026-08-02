@@ -19,7 +19,7 @@ cp .env.production.example .env.production
 
 Use `.env` for default/local Docker Compose values, and `.env.production` for production values. Keep `.env.production` out of version control (add it to `.gitignore`) and exclude it from Docker build context (add it to `.dockerignore`).
 
-By default, the app uses `/elevation/v1/srtm90m`, which is proxied by Nginx to OpenTopoData.
+By default, the app uses `/elevation/v1/srtm90m`, which is proxied by Nginx to `https://api.opentopodata.org`.
 
 ### 2) Build and run
 
