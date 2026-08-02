@@ -71,9 +71,12 @@ export function buildTrackMesh(
   for (let i = 1; i < track.points.length; i++) {
     const prevSrc = track.points[i - 1];
     const currSrc = track.points[i];
-    const prev = toTrackPoint(prevSrc.lat, prevSrc.lon);
+    const prev = pts[pts.length - 1];
     const curr = toTrackPoint(currSrc.lat, currSrc.lon);
-    const distance = prev.distanceTo(curr);
+    const dx = curr.x - prev.x;
+    const dz = curr.z - prev.z;
+    const dy = (curr.y - prev.y) / cs.verticalScale;
+    const distance = Math.hypot(dx, dy, dz);
 
     if (distance < minSpacing) {
       pts[pts.length - 1] = curr;
