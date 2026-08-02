@@ -25,7 +25,7 @@ cd /tmp/opentopodata
 make build
 ```
 
-Then set `OPENTOPODATA_IMAGE` in `.env.production` to the image tag built by `make build` (for example `opentopodata:1.7.0`).
+Then set `OPENTOPODATA_IMAGE` in your Compose env file (`.env` for default/local runs, or `.env.production` when using `--env-file`) to the image tag produced by `make build` (confirm with `docker image ls`).
 
 ### 3) Build and run
 
