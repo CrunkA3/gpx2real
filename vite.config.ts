@@ -2,7 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
+  const env = loadEnv(mode, process.cwd(), 'ELEVATION_');
   const elevationProxyTarget = env.ELEVATION_PROXY_TARGET || 'https://api.opentopodata.org';
 
   return {
