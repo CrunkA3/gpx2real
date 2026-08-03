@@ -214,35 +214,6 @@ export async function fetchElevationGrid(
   return { values, gridSize: n, bbox, minEle, maxEle };
 }
 
-// ─── Bilinear interpolation ───────────────────────────────────────────
-
-/**
- * Returns the interpolated elevation at (lat, lon) using the grid.
- * Returns minEle if the point is outside the grid.
- */
-export function sampleGrid(grid: ElevationGrid, lat: number, lon: number): number {
-  const { values, gridSize: n, bbox } = grid;
-
-  // Normalised grid coords [0..n-1]
-  const col = ((lon - bbox.minLon) / (bbox.maxLon - bbox.minLon)) * (n - 1);
-  const row = ((bbox.maxLat - lat) / (bbox.maxLat - bbox.minLat)) * (n - 1);
-
-  if (col < 0 || col > n - 1 || row < 0 || row > n - 1) {
-    return grid.minEle;
-  }
-
-  const c0 = Math.floor(col);
-  const c1 = Math.min(c0 + 1, n - 1);
-  const r0 = Math.floor(row);
-  const r1 = Math.min(r0 + 1, n - 1);
-
-  const tc = col - c0;
-  const tr = row - r0;
-
-  const h00 = values[r0][c0];
-  const h10 = values[r0][c1];
-  const h01 = values[r1][c0];
-  const h11 = values[r1][c1];
-
-  return h00 * (1 - tc) * (1 - tr) + h10 * tc * (1 - tr) + h01 * (1 - tc) * tr + h11 * tc * tr;
-}
+// Note: there is deliberately no sampler for the raw grid here. Anything that
+// has to sit on the terrain must go through `TerrainSurface` in terrainBuilder,
+// which samples the surface that is actually rendered.

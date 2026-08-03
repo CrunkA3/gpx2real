@@ -52,9 +52,13 @@ export interface TerrainSettings {
 }
 
 export interface TrackSettings {
-  /** Offset in metres: positive = above terrain, negative = below */
+  /**
+   * Vertical offset from the terrain surface: 0 = resting on it, positive =
+   * hovering above, negative = sunk in. In scene units, not elevation metres,
+   * so it stays constant as `verticalScale` changes.
+   */
   offset: number;
-  /** Tube radius in metres */
+  /** Half-width of the track band in metres; also its height */
   width: number;
   profile: TrackProfile;
 }

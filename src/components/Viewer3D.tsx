@@ -160,7 +160,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
   useEffect(() => {
     if (!gpxData || !grid) return;
 
-    const { mesh: terrainMesh, coordSystem: cs } = buildTerrainMesh(grid, settings.terrain);
+    const { mesh: terrainMesh, coordSystem: cs, surface } = buildTerrainMesh(grid, settings.terrain);
 
     // ── Terrain ──
     clearGroup(terrainGroupRef.current);
@@ -170,7 +170,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
     clearGroup(tracksGroupRef.current);
     const trackMeshes = buildAllTrackMeshes(
       gpxData.tracks,
-      grid,
+      surface,
       cs,
       settings.track.offset,
       settings.track.width,
@@ -183,7 +183,7 @@ const Viewer3D = forwardRef<Viewer3DHandle, Props>(({ gpxData, grid, settings },
     if (gpxData.waypoints.length > 0) {
       const wpGroup = buildWaypointMeshes(
         gpxData.waypoints,
-        grid,
+        surface,
         cs,
         settings.waypoint,
         settings.track.offset,

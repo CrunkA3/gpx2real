@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     baseDepth: 120,
   },
   track: {
-    offset: 6,
+    offset: 0,
     width: 10,
     profile: 'square',
   },

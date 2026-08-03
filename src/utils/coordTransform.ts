@@ -69,6 +69,30 @@ function projectToBaseShape(nx: number, nz: number, shape: BaseShape): [number, 
   return [Math.cos(angle) * r, Math.sin(angle) * r];
 }
 
+function unprojectFromBaseShape(sx: number, sz: number, shape: BaseShape): [number, number] {
+  if (shape === 'square') return [sx, sz];
+
+  const r = Math.hypot(sx, sz);
+  if (r < 1e-9) return [0, 0];
+
+  const angle = Math.atan2(sz, sx);
+  const boundaryScale = shape === 'round' ? 1 : boundaryScaleForHex(angle);
+  const radial = r / boundaryScale;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  // Undo the Chebyshev-radius → polar-radius remap of projectToBaseShape.
+  const chebyshev = Math.max(Math.abs(cos), Math.abs(sin));
+  return [(radial * cos) / chebyshev, (radial * sin) / chebyshev];
+}
+
+/**
+ * Scene XZ → bounding-box coordinates in [-1,1], undoing the base-shape warp.
+ * Inverse of the horizontal half of `geoToLocal`.
+ */
+export function localToNormalized(cs: CoordSystem, x: number, z: number): [number, number] {
+  return unprojectFromBaseShape(x / cs.halfWidthM, z / cs.halfDepthM, cs.baseShape);
+}
+
 /** Convert geographic coordinates to Three.js XYZ. */
 export function geoToLocal(
   cs: CoordSystem,

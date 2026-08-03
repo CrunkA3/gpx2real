@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import type { GPXWaypoint, WaypointSettings, ElevationGrid } from '../types';
+import type { GPXWaypoint, WaypointSettings } from '../types';
 import type { CoordSystem } from './coordTransform';
 import { geoToLocal } from './coordTransform';
-import { sampleGrid } from './elevationFetcher';
+import type { TerrainSurface } from './terrainBuilder';
 
 // ─── Waypoint Mesh Builder ────────────────────────────────────────────
 
@@ -23,13 +23,29 @@ function makeGeometry(shape: WaypointSettings['shape'], size: number): THREE.Buf
   }
 }
 
+/** Distance from a shape's origin to its underside, so it rests on the ground. */
+function halfHeight(shape: WaypointSettings['shape'], size: number): number {
+  switch (shape) {
+    case 'sphere':
+      return size;
+    case 'cylinder':
+      return size;
+    case 'box':
+      return size * 0.75;
+    default: {
+      const _exhaustive: never = shape;
+      throw new Error(`Unsupported waypoint shape: ${_exhaustive}`);
+    }
+  }
+}
+
 /**
  * Builds a Three.js group containing one mesh per waypoint.
  * Each mesh is placed on the terrain surface (+ small vertical offset for visibility).
  */
 export function buildWaypointMeshes(
   waypoints: GPXWaypoint[],
-  grid: ElevationGrid,
+  surface: TerrainSurface,
   cs: CoordSystem,
   settings: WaypointSettings,
   trackOffset: number,
@@ -44,10 +60,10 @@ export function buildWaypointMeshes(
   });
 
   for (const wp of waypoints) {
-    const terrainEle = sampleGrid(grid, wp.lat, wp.lon);
-    // Place waypoints at the same vertical level as tracks
-    const ele = terrainEle + trackOffset + settings.size * 0.5;
-    const [x, y, z] = geoToLocal(cs, wp.lat, wp.lon, ele);
+    const [x, , z] = geoToLocal(cs, wp.lat, wp.lon, 0);
+    // Sizes and the track offset are scene units, so they must not go through
+    // geoToLocal — that would scale them by verticalScale on the Y axis alone.
+    const y = surface.sampleY(x, z) + trackOffset + halfHeight(settings.shape, settings.size);
 
     const geo = makeGeometry(settings.shape, settings.size);
     const mesh = new THREE.Mesh(geo, mat.clone());
