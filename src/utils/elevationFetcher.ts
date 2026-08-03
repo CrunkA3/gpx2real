@@ -91,6 +91,7 @@ async function fetchBatch(
   });
 
   if (missingPoints.length === 0) {
+    saveCache(cache);
     return cachedValues.map((value) => value ?? 0);
   }
 
