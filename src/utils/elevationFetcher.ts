@@ -4,10 +4,46 @@ const API_BASE =
   import.meta.env.VITE_API_BASE_URL || '/elevation/v1/srtm30m';
 const BATCH_SIZE = 100;
 const RATE_LIMIT_MS = 1100; // 1 request/second + buffer
+const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const CACHE_STORAGE_KEY = 'gpx2real:elevation-cache:v1';
 
 interface ApiResult {
   elevation: number | null;
   location: { lat: number; lng: number };
+}
+
+interface CachedElevation {
+  elevation: number;
+  timestamp: number;
+}
+
+function getPointKey(lat: number, lon: number): string {
+  return `${lat.toFixed(6)},${lon.toFixed(6)}`;
+}
+
+function loadCache(): Map<string, CachedElevation> {
+  try {
+    const raw = localStorage.getItem(CACHE_STORAGE_KEY);
+    if (!raw) return new Map();
+    const parsed = JSON.parse(raw) as Record<string, CachedElevation>;
+    const now = Date.now();
+    const entries = Object.entries(parsed).filter(([, value]) => (
+      Number.isFinite(value?.timestamp)
+      && Number.isFinite(value?.elevation)
+      && now - value.timestamp < CACHE_TTL_MS
+    ));
+    return new Map(entries);
+  } catch {
+    return new Map();
+  }
+}
+
+function saveCache(cache: Map<string, CachedElevation>): void {
+  try {
+    localStorage.setItem(CACHE_STORAGE_KEY, JSON.stringify(Object.fromEntries(cache.entries())));
+  } catch {
+    // Ignore storage write failures
+  }
 }
 
 function isPlaceholderApiBase(url: string): boolean {
@@ -34,7 +70,30 @@ function isValidApiBase(url: string): boolean {
 
 // ─── Fetch a single batch of up to 100 locations ─────────────────────
 
-async function fetchBatch(points: { lat: number; lon: number }[]): Promise<number[]> {
+async function fetchBatch(
+  points: { lat: number; lon: number }[],
+  cache: Map<string, CachedElevation>,
+): Promise<number[]> {
+  const now = Date.now();
+  const cachedValues: (number | null)[] = new Array(points.length).fill(null);
+  const missingPoints: { lat: number; lon: number }[] = [];
+  const missingIndexes: number[] = [];
+
+  points.forEach((point, index) => {
+    const key = getPointKey(point.lat, point.lon);
+    const cached = cache.get(key);
+    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      cachedValues[index] = cached.elevation;
+      return;
+    }
+    missingPoints.push(point);
+    missingIndexes.push(index);
+  });
+
+  if (missingPoints.length === 0) {
+    return cachedValues.map((value) => value ?? 0);
+  }
+
   if (isPlaceholderApiBase(API_BASE)) {
     throw new Error(
       'VITE_API_BASE_URL points to the placeholder api.example.com. Configure a real elevation API endpoint.',
@@ -46,7 +105,7 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
     );
   }
 
-  const locations = points.map((p) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`).join('|');
+  const locations = missingPoints.map((p) => getPointKey(p.lat, p.lon)).join('|');
   const base = new URL(API_BASE, window.location.origin);
   base.searchParams.set('locations', locations);
   const url = base.toString();
@@ -76,7 +135,21 @@ async function fetchBatch(points: { lat: number; lon: number }[]): Promise<numbe
     throw new Error(`Elevation API returned status: ${json.status}`);
   }
 
-  return json.results.map((r) => r.elevation ?? 0);
+  if (json.results.length !== missingPoints.length) {
+    throw new Error(
+      `Elevation API returned ${json.results.length} points, expected ${missingPoints.length}.`,
+    );
+  }
+
+  json.results.forEach((result, idx) => {
+    const missingPoint = missingPoints[idx];
+    const elevation = result.elevation ?? 0;
+    const key = getPointKey(missingPoint.lat, missingPoint.lon);
+    cachedValues[missingIndexes[idx]] = elevation;
+    cache.set(key, { elevation, timestamp: now });
+  });
+
+  return cachedValues.map((value) => value ?? 0);
 }
 
 // ─── Sleep helper ────────────────────────────────────────────────────
@@ -110,10 +183,11 @@ export async function fetchElevationGrid(
   // Fetch in batches with rate limiting
   const elevations: number[] = [];
   let fetched = 0;
+  const cache = loadCache();
 
   for (let i = 0; i < points.length; i += BATCH_SIZE) {
     const batch = points.slice(i, i + BATCH_SIZE);
-    const results = await fetchBatch(batch);
+    const results = await fetchBatch(batch, cache);
     elevations.push(...results);
     fetched += batch.length;
     onProgress?.(fetched, total);
@@ -123,6 +197,9 @@ export async function fetchElevationGrid(
       await sleep(RATE_LIMIT_MS);
     }
   }
+
+  // Persist the pruned cache even when all points were served from cache
+  saveCache(cache);
 
   // Reshape to 2D array [row][col]
   const values: number[][] = [];
