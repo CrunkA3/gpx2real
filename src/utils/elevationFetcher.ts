@@ -91,7 +91,6 @@ async function fetchBatch(
   });
 
   if (missingPoints.length === 0) {
-    saveCache(cache);
     return cachedValues.map((value) => value ?? 0);
   }
 
@@ -149,8 +148,6 @@ async function fetchBatch(
     cachedValues[missingIndexes[idx]] = elevation;
     cache.set(key, { elevation, timestamp: now });
   });
-
-  saveCache(cache);
 
   return cachedValues.map((value) => value ?? 0);
 }
