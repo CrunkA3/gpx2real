@@ -1,31 +1,30 @@
 import * as THREE from 'three';
-import type { ElevationGrid, TerrainSettings } from '../types';
+import type { BoundingBox, ElevationGrid, GPXTrack, TerrainSettings } from '../types';
 import {
   buildCoordSystem,
   geoToLocal,
   localToNormalized,
   type CoordSystem,
 } from './coordTransform';
+import { buildCorridor } from './trackCorridor';
 
 // ─── Colour helpers ───────────────────────────────────────────────────
 
+// Endpoints of the high-altitude ramp, hoisted so the hot path allocates nothing.
+const ROCK_COLOR = new THREE.Color(0.55, 0.4, 0.3);
+const SNOW_COLOR = new THREE.Color(0.95, 0.95, 0.95);
+
 /** Maps a normalised value [0,1] to a terrain colour (low→high: green→brown→white). */
-function elevationColor(t: number): THREE.Color {
+function elevationColor(t: number, target: THREE.Color): THREE.Color {
   if (t < 0.3) {
     // green → yellow-green
-    return new THREE.Color().setHSL(0.28 - t * 0.1, 0.6, 0.35 + t * 0.2);
+    return target.setHSL(0.28 - t * 0.1, 0.6, 0.35 + t * 0.2);
   } else if (t < 0.7) {
     // brown range
-    return new THREE.Color().setHSL(0.08 - (t - 0.3) * 0.05, 0.5, 0.4 + (t - 0.3) * 0.1);
-  } else {
-    // brown → white
-    const s = (t - 0.7) / 0.3;
-    return new THREE.Color().lerpColors(
-      new THREE.Color(0.55, 0.4, 0.3),
-      new THREE.Color(0.95, 0.95, 0.95),
-      s,
-    );
+    return target.setHSL(0.08 - (t - 0.3) * 0.05, 0.5, 0.4 + (t - 0.3) * 0.1);
   }
+  // brown → white
+  return target.lerpColors(ROCK_COLOR, SNOW_COLOR, (t - 0.7) / 0.3);
 }
 
 /** Palette for layered terrain (10 distinct colours). */
@@ -238,6 +237,126 @@ function createTerrainSurface(
 
 // ─── Build terrain geometry ───────────────────────────────────────────
 
+function terrainCoordSystem(grid: ElevationGrid, settings: TerrainSettings): CoordSystem {
+  const { bbox, minEle } = grid;
+  return buildCoordSystem(
+    (bbox.minLat + bbox.maxLat) / 2,
+    (bbox.minLon + bbox.maxLon) / 2,
+    minEle,
+    settings.verticalScale,
+    bbox,
+    settings.baseShape,
+  );
+}
+
+function effectiveResolution(grid: ElevationGrid, settings: TerrainSettings): number {
+  return settings.style === 'lowpoly'
+    ? Math.max(8, Math.floor(grid.gridSize / 4))
+    : grid.gridSize;
+}
+
+/**
+ * Geographic position of grid node (row, col) on an `m`-by-`m` grid over the
+ * bounding box. Row 0 is the northernmost. Both the coarse and the refined node
+ * loops go through this, so their grids can never drift apart.
+ */
+function nodeLatLon(bbox: BoundingBox, row: number, col: number, m: number): [number, number] {
+  return [
+    bbox.maxLat - (row / (m - 1)) * (bbox.maxLat - bbox.minLat),
+    bbox.minLon + (col / (m - 1)) * (bbox.maxLon - bbox.minLon),
+  ];
+}
+
+function styledElevations(grid: ElevationGrid, settings: TerrainSettings, n: number): number[] {
+  const { values, gridSize: src, minEle, maxEle } = grid;
+  const raw: number[] = [];
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const srcRow = Math.round((row / (n - 1)) * (src - 1));
+      const srcCol = Math.round((col / (n - 1)) * (src - 1));
+      raw.push(values[srcRow][srcCol]);
+    }
+  }
+  return settings.style === 'layers'
+    ? applyLayersStyle(raw, minEle, maxEle, settings.layerCount)
+    : raw;
+}
+
+/** Ceiling on the refined top surface: ~66k vertices, which keeps a rebuild interactive. */
+const MAX_REFINED_GRID = 257;
+
+export interface RefinementPlan {
+  /** Grid size of the refined top surface. */
+  gridSize: number;
+  /** Largest node spacing in scene units. */
+  spacing: number;
+  /** Corridor half-width after the resolution floor. */
+  grooveHalfWidth: number;
+}
+
+/**
+ * How finely the top surface has to be tessellated to express a groove of the
+ * requested width, and how wide that groove ends up.
+ *
+ * A groove needs roughly two nodes across it, so the target spacing is the
+ * requested half-width. Where the cap bites, the groove widens rather than
+ * disappearing — the UI reports the result.
+ */
+export function planRefinement(
+  grid: ElevationGrid,
+  settings: TerrainSettings,
+  requestedHalfWidth: number,
+): RefinementPlan {
+  const cs = terrainCoordSystem(grid, settings);
+  const span = 2 * Math.max(cs.halfWidthM, cs.halfDepthM);
+  const wanted = Math.ceil(span / Math.max(requestedHalfWidth, 1e-6)) + 1;
+  const gridSize = Math.min(
+    MAX_REFINED_GRID,
+    Math.max(effectiveResolution(grid, settings), wanted),
+  );
+  const spacing = span / (gridSize - 1);
+  return { gridSize, spacing, grooveHalfWidth: Math.max(requestedHalfWidth, spacing) };
+}
+
+interface TerrainNodes {
+  x: Float64Array;
+  y: Float64Array;
+  z: Float64Array;
+  /** Grid size; arrays are size × size, row-major, row 0 = northernmost. */
+  size: number;
+}
+
+/**
+ * Re-samples the surface `coarse` describes onto an m × m grid.
+ *
+ * The nodes land exactly on the already-rendered coarse surface, so `original`,
+ * `lowpoly` and `layers` all look unchanged — there are only more triangles to
+ * emboss into.
+ */
+function refineNodes(
+  grid: ElevationGrid,
+  cs: CoordSystem,
+  coarse: TerrainSurface,
+  m: number,
+): TerrainNodes {
+  const { bbox } = grid;
+  const x = new Float64Array(m * m);
+  const y = new Float64Array(m * m);
+  const z = new Float64Array(m * m);
+
+  for (let row = 0; row < m; row++) {
+    for (let col = 0; col < m; col++) {
+      const idx = row * m + col;
+      const [lat, lon] = nodeLatLon(bbox, row, col, m);
+      const [px, , pz] = geoToLocal(cs, lat, lon, 0);
+      x[idx] = px;
+      z[idx] = pz;
+      y[idx] = coarse.sampleY(px, pz);
+    }
+  }
+  return { x, y, z, size: m };
+}
+
 interface TerrainBuildResult {
   mesh: THREE.Mesh;
   coordSystem: CoordSystem;
@@ -247,42 +366,43 @@ interface TerrainBuildResult {
 export function buildTerrainMesh(
   grid: ElevationGrid,
   settings: TerrainSettings,
+  cut?: { tracks: GPXTrack[]; halfWidth: number },
 ): TerrainBuildResult {
-  const { values, gridSize: n, bbox, minEle, maxEle } = grid;
+  const { minEle, maxEle } = grid;
+  const cs = terrainCoordSystem(grid, settings);
+  const coarseN = effectiveResolution(grid, settings);
+  const styledEle = styledElevations(grid, settings, coarseN);
 
-  const centerLat = (bbox.minLat + bbox.maxLat) / 2;
-  const centerLon = (bbox.minLon + bbox.maxLon) / 2;
-  const cs = buildCoordSystem(
-    centerLat,
-    centerLon,
-    minEle,
-    settings.verticalScale,
-    bbox,
-    settings.baseShape,
-  );
-
-  // ── Choose effective resolution based on style ──
-  const effectiveN = settings.style === 'lowpoly' ? Math.max(8, Math.floor(n / 4)) : n;
-
-  // ── Sample elevation values at the effective resolution ──
-  const rawEle: number[] = [];
-  for (let row = 0; row < effectiveN; row++) {
-    for (let col = 0; col < effectiveN; col++) {
-      // Map effective grid coords back to original grid coords
-      const srcRow = Math.round((row / (effectiveN - 1)) * (n - 1));
-      const srcCol = Math.round((col / (effectiveN - 1)) * (n - 1));
-      rawEle.push(values[srcRow][srcCol]);
+  // ── Coarse nodes: the surface every style renders ──
+  const coarse: TerrainNodes = {
+    x: new Float64Array(coarseN * coarseN),
+    y: new Float64Array(coarseN * coarseN),
+    z: new Float64Array(coarseN * coarseN),
+    size: coarseN,
+  };
+  for (let row = 0; row < coarseN; row++) {
+    for (let col = 0; col < coarseN; col++) {
+      const idx = row * coarseN + col;
+      const [lat, lon] = nodeLatLon(grid.bbox, row, col, coarseN);
+      const [x, y, z] = geoToLocal(cs, lat, lon, styledEle[idx]);
+      coarse.x[idx] = x;
+      coarse.y[idx] = y;
+      coarse.z[idx] = z;
     }
   }
 
-  // ── Apply style-specific elevation modification ──
-  const styledEle =
-    settings.style === 'layers'
-      ? applyLayersStyle(rawEle, minEle, maxEle, settings.layerCount)
-      : rawEle;
+  // ── Refine only when there is something to cut ──
+  let nodes = coarse;
+  if (cut) {
+    const plan = planRefinement(grid, settings, cut.halfWidth);
+    const corridor = buildCorridor(cut.tracks, cs, plan.grooveHalfWidth, plan.spacing);
+    if (corridor) {
+      const coarseSurface = createTerrainSurface(coarse.x, coarse.y, coarse.z, coarseN, cs);
+      nodes = refineNodes(grid, cs, coarseSurface, plan.gridSize);
+    }
+  }
 
-  // ── Build BufferGeometry ──
-  const N = effectiveN;
+  const N = nodes.size;
   const topVertexCount = N * N;
 
   // ── Perimeter ring, walked clockwise seen from above ──
@@ -300,48 +420,29 @@ export function buildTerrainMesh(
   const colors = new Float32Array(totalVertexCount * 3);
 
   const eleRange = maxEle - minEle || 1;
-const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
+  const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
+  // y = (ele - minEle) * verticalScale, so this is the same t the coarse path
+  // used to compute from `ele` directly.
+  const yRange = eleRange * settings.verticalScale || 1;
+  const scratch = new THREE.Color();
 
-  // Top-surface node positions, kept for TerrainSurface so it interpolates the
-  // very same triangles that get drawn.
-  const nodeX = new Float64Array(topVertexCount);
-  const nodeY = new Float64Array(topVertexCount);
-  const nodeZ = new Float64Array(topVertexCount);
+  for (let idx = 0; idx < topVertexCount; idx++) {
+    const topPos = idx * 3;
+    positions[topPos] = nodes.x[idx];
+    positions[topPos + 1] = nodes.y[idx];
+    positions[topPos + 2] = nodes.z[idx];
 
-  for (let row = 0; row < N; row++) {
-    for (let col = 0; col < N; col++) {
-      const idx = row * N + col;
-      const lat = bbox.maxLat - (row / (N - 1)) * (bbox.maxLat - bbox.minLat);
-      const lon = bbox.minLon + (col / (N - 1)) * (bbox.maxLon - bbox.minLon);
-      const ele = styledEle[idx];
-
-      const [x, y, z] = geoToLocal(cs, lat, lon, ele);
-
-      const topPos = idx * 3;
-
-      positions[topPos] = x;
-      positions[topPos + 1] = y;
-      positions[topPos + 2] = z;
-
-      nodeX[idx] = x;
-      nodeY[idx] = y;
-      nodeZ[idx] = z;
-
-      // ── Per-vertex colour ──
-      let c: THREE.Color;
-      if (settings.style === 'layers') {
-        const layerIdx = Math.floor(((ele - minEle) / eleRange) * settings.layerCount);
-        const paletteIdx = Math.min(layerIdx, LAYER_PALETTE.length - 1);
-        c = new THREE.Color(LAYER_PALETTE[paletteIdx]);
-      } else {
-        const t = Math.max(0, Math.min(1, (ele - minEle) / eleRange));
-        c = elevationColor(t);
-      }
-
-      colors[topPos] = c.r;
-      colors[topPos + 1] = c.g;
-      colors[topPos + 2] = c.b;
+    const t = Math.max(0, Math.min(1, nodes.y[idx] / yRange));
+    if (settings.style === 'layers') {
+      const layerIdx = Math.floor(t * settings.layerCount);
+      scratch.set(LAYER_PALETTE[Math.min(layerIdx, LAYER_PALETTE.length - 1)]);
+    } else {
+      elevationColor(t, scratch);
     }
+
+    colors[topPos] = scratch.r;
+    colors[topPos + 1] = scratch.g;
+    colors[topPos + 2] = scratch.b;
   }
 
   // ── Underside: one fan from the centre over the perimeter ring ──
@@ -420,6 +521,6 @@ const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
   return {
     mesh,
     coordSystem: cs,
-    surface: createTerrainSurface(nodeX, nodeY, nodeZ, N, cs),
+    surface: createTerrainSurface(nodes.x, nodes.y, nodes.z, N, cs),
   };
 }

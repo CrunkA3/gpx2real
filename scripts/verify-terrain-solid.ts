@@ -4,8 +4,9 @@
  * agree with the TerrainSurface sampler that everything else drapes against.
  */
 import * as THREE from 'three';
-import type { BoundingBox, ElevationGrid, TerrainSettings } from '../src/types.ts';
-import { buildTerrainMesh } from '../src/utils/terrainBuilder.ts';
+import type { BoundingBox, ElevationGrid, GPXTrack, TerrainSettings } from '../src/types.ts';
+import { buildTerrainMesh, planRefinement } from '../src/utils/terrainBuilder.ts';
+import { geoToLocal } from '../src/utils/coordTransform.ts';
 
 const BBOX: BoundingBox = { minLat: 47.2, maxLat: 47.25, minLon: 11.3, maxLon: 11.36 };
 const GRID_SIZE = 16;
@@ -137,6 +138,107 @@ for (const style of ['original', 'lowpoly', 'layers'] as const) {
     if (worstTop > 1e-3) fail(label, `top disagrees with sampler by ${worstTop.toFixed(4)}`);
     else console.log(`  ok    ${label} top matches sampler (<=${worstTop.toExponential(1)})`);
   }
+}
+
+// ── Refinement fidelity ──
+// The refined *nodes* are sampled from the coarse surface, so at a node the two
+// agree exactly. They do NOT agree everywhere: a fine triangle straddling a
+// coarse fold cuts the corner off it, by up to the fine spacing times the change
+// in slope. What must hold is node-exactness plus containment — the refined
+// surface interpolates the coarse one and so can never leave its height range.
+console.log('');
+console.log('Refinement fidelity\n');
+
+/** Half-width chosen so the refined grid is ~93², well under the 257 cap. */
+const REFINE_HALF_WIDTH = 60;
+
+const REFINE_TRACK: GPXTrack = {
+  name: 'traverse',
+  points: Array.from({ length: 40 }, (_, i) => ({
+    lat: BBOX.minLat + 0.004 + (i / 39) * 0.042,
+    lon: BBOX.minLon + 0.005 + (i / 39) * 0.05,
+    ele: 0,
+  })),
+};
+
+/** Y range of the top surface only — the underside sits at baseY and would swamp it. */
+function topYRange(mesh: THREE.Mesh, baseY: number): [number, number] {
+  const pos = mesh.geometry.getAttribute('position');
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y <= baseY + 1e-6) continue;
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  return [lo, hi];
+}
+
+for (const style of ['original', 'lowpoly', 'layers'] as const) {
+  for (const baseShape of ['square', 'hex', 'round'] as const) {
+    const label = `refined ${style} / ${baseShape}`;
+    const grid = makeGrid();
+    const settings = settingsFor(style, baseShape);
+
+    const plain = buildTerrainMesh(grid, settings);
+    const refined = buildTerrainMesh(grid, settings, {
+      tracks: [REFINE_TRACK],
+      halfWidth: REFINE_HALF_WIDTH,
+    });
+    refined.mesh.updateMatrixWorld(true);
+
+    const plainTris = plain.mesh.geometry.getIndex()!.count / 3;
+    const refinedTris = refined.mesh.geometry.getIndex()!.count / 3;
+    if (refinedTris <= plainTris) {
+      fail(label, `refined mesh has ${refinedTris} triangles, not more than ${plainTris}`);
+      continue;
+    }
+
+    checkManifold(label, refined.mesh);
+
+    // ── Node-exactness ──
+    const plan = planRefinement(grid, settings, REFINE_HALF_WIDTH);
+    const m = plan.gridSize;
+    const cs = refined.coordSystem;
+    let worstNode = 0;
+    let nodeSamples = 0;
+    for (let row = 2; row < m - 2; row += 7) {
+      for (let col = 2; col < m - 2; col += 7) {
+        const lat = BBOX.maxLat - (row / (m - 1)) * (BBOX.maxLat - BBOX.minLat);
+        const lon = BBOX.minLon + (col / (m - 1)) * (BBOX.maxLon - BBOX.minLon);
+        const [x, , z] = geoToLocal(cs, lat, lon, 0);
+        const hit = castDown(refined.mesh, x, z);
+        if (hit === null) continue;
+        worstNode = Math.max(worstNode, Math.abs(hit - plain.surface.sampleY(x, z)));
+        nodeSamples++;
+      }
+    }
+    if (nodeSamples < 20) fail(label, `only ${nodeSamples} node samples hit the mesh`);
+    else if (worstNode > 1e-3) fail(label, `refined nodes off the coarse surface by ${worstNode.toFixed(4)}`);
+    else console.log(`  ok    ${label} nodes exact (${nodeSamples} samples, <=${worstNode.toExponential(1)})`);
+
+    // ── Containment: interpolation cannot exceed the source range ──
+    const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
+    const [plainLo, plainHi] = topYRange(plain.mesh, baseY);
+    const [refLo, refHi] = topYRange(refined.mesh, baseY);
+    if (refLo < plainLo - 1e-3 || refHi > plainHi + 1e-3) {
+      fail(label, `refined Y range [${refLo.toFixed(2)}, ${refHi.toFixed(2)}] escapes [${plainLo.toFixed(2)}, ${plainHi.toFixed(2)}]`);
+    } else {
+      console.log(`  ok    ${label} Y range contained (${refinedTris} tris)`);
+    }
+  }
+}
+
+// ── The resolution cap ──
+// A half-width far below the cell size must widen the groove, not vanish.
+{
+  const grid = makeGrid();
+  const settings = settingsFor('original', 'square');
+  const capped = planRefinement(grid, settings, 5);
+  if (capped.gridSize !== 257) fail('cap', `gridSize ${capped.gridSize}, expected the 257 ceiling`);
+  else if (!(capped.grooveHalfWidth > 5)) fail('cap', `grooveHalfWidth ${capped.grooveHalfWidth} was not raised above 5`);
+  else console.log(`  ok    cap holds (grid 257, groove half-width ${capped.grooveHalfWidth.toFixed(1)})`);
 }
 
 console.log('');
