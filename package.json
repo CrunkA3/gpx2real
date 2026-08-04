@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "verify:track": "node --import ./scripts/register-ts.mjs scripts/verify-track-drape.ts"
+    "verify:track": "node --import ./scripts/register-ts.mjs scripts/verify-track-drape.ts",
+    "verify:corridor": "node --import ./scripts/register-ts.mjs scripts/verify-corridor.ts"
   },
   "dependencies": {
     "react": "^18.3.1",
