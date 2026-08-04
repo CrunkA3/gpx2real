@@ -828,6 +828,18 @@ function effectiveResolution(grid: ElevationGrid, settings: TerrainSettings): nu
     : grid.gridSize;
 }
 
+/**
+ * Geographic position of grid node (row, col) on an `m`-by-`m` grid over the
+ * bounding box. Row 0 is the northernmost. Both the coarse and the refined node
+ * loops go through this, so their grids can never drift apart.
+ */
+function nodeLatLon(bbox: BoundingBox, row: number, col: number, m: number): [number, number] {
+  return [
+    bbox.maxLat - (row / (m - 1)) * (bbox.maxLat - bbox.minLat),
+    bbox.minLon + (col / (m - 1)) * (bbox.maxLon - bbox.minLon),
+  ];
+}
+
 function styledElevations(grid: ElevationGrid, settings: TerrainSettings, n: number): number[] {
   const { values, gridSize: src, minEle, maxEle } = grid;
   const raw: number[] = [];
@@ -920,8 +932,7 @@ function refineNodes(
   for (let row = 0; row < m; row++) {
     for (let col = 0; col < m; col++) {
       const idx = row * m + col;
-      const lat = bbox.maxLat - (row / (m - 1)) * (bbox.maxLat - bbox.minLat);
-      const lon = bbox.minLon + (col / (m - 1)) * (bbox.maxLon - bbox.minLon);
+      const [lat, lon] = nodeLatLon(bbox, row, col, m);
       const [px, , pz] = geoToLocal(cs, lat, lon, 0);
       x[idx] = px;
       z[idx] = pz;
@@ -939,6 +950,10 @@ the signature to write into a caller-owned instance — the returned colours are
 identical. Do this before Step 7, which calls the new form:
 
 ```ts
+// Endpoints of the high-altitude ramp, hoisted so the hot path allocates nothing.
+const ROCK_COLOR = new THREE.Color(0.55, 0.4, 0.3);
+const SNOW_COLOR = new THREE.Color(0.95, 0.95, 0.95);
+
 /** Maps a normalised value [0,1] to a terrain colour (low→high: green→brown→white). */
 function elevationColor(t: number, target: THREE.Color): THREE.Color {
   if (t < 0.3) {
@@ -949,23 +964,24 @@ function elevationColor(t: number, target: THREE.Color): THREE.Color {
     return target.setHSL(0.08 - (t - 0.3) * 0.05, 0.5, 0.4 + (t - 0.3) * 0.1);
   }
   // brown → white
-  const s = (t - 0.7) / 0.3;
-  return target.lerpColors(
-    new THREE.Color(0.55, 0.4, 0.3),
-    new THREE.Color(0.95, 0.95, 0.95),
-    s,
-  );
+  return target.lerpColors(ROCK_COLOR, SNOW_COLOR, (t - 0.7) / 0.3);
 }
 ```
+
+Without hoisting these two, the branch above `t = 0.7` would still allocate two
+colours per vertex and the refactor would miss most of its point on snowy terrain.
 
 - [ ] **Step 7: Rework buildTerrainMesh to emit from a node set**
 
 Extend the imports at the top of the file:
 
 ```ts
-import type { ElevationGrid, GPXTrack, TerrainSettings } from '../types';
+import type { BoundingBox, ElevationGrid, GPXTrack, TerrainSettings } from '../types';
 import { buildCorridor } from './trackCorridor';
 ```
+
+(`BoundingBox` is needed by the `nodeLatLon` helper added in Step 3, so add the
+type import there if Step 3 has not already.)
 
 Replace everything from the `export function buildTerrainMesh(` line down to and
 including `const topVertexCount = N * N;` — that is, the line immediately above the
@@ -993,8 +1009,7 @@ export function buildTerrainMesh(
   for (let row = 0; row < coarseN; row++) {
     for (let col = 0; col < coarseN; col++) {
       const idx = row * coarseN + col;
-      const lat = grid.bbox.maxLat - (row / (coarseN - 1)) * (grid.bbox.maxLat - grid.bbox.minLat);
-      const lon = grid.bbox.minLon + (col / (coarseN - 1)) * (grid.bbox.maxLon - grid.bbox.minLon);
+      const [lat, lon] = nodeLatLon(grid.bbox, row, col, coarseN);
       const [x, y, z] = geoToLocal(cs, lat, lon, styledEle[idx]);
       coarse.x[idx] = x;
       coarse.y[idx] = y;
