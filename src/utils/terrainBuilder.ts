@@ -284,7 +284,18 @@ export function buildTerrainMesh(
   // ── Build BufferGeometry ──
   const N = effectiveN;
   const topVertexCount = N * N;
-  const totalVertexCount = topVertexCount * 2;
+
+  // ── Perimeter ring, walked clockwise seen from above ──
+  const perimeter: number[] = [];
+  for (let col = 0; col < N; col++) perimeter.push(col);
+  for (let row = 1; row < N; row++) perimeter.push(row * N + (N - 1));
+  for (let col = N - 2; col >= 0; col--) perimeter.push((N - 1) * N + col);
+  for (let row = N - 2; row > 0; row--) perimeter.push(row * N);
+
+  const bottomRingStart = topVertexCount;
+  const bottomCenter = bottomRingStart + perimeter.length;
+  const totalVertexCount = bottomCenter + 1;
+
   const positions = new Float32Array(totalVertexCount * 3);
   const colors = new Float32Array(totalVertexCount * 3);
 
@@ -307,8 +318,6 @@ const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
       const [x, y, z] = geoToLocal(cs, lat, lon, ele);
 
       const topPos = idx * 3;
-      const bottomIdx = idx + topVertexCount;
-      const bottomPos = bottomIdx * 3;
 
       positions[topPos] = x;
       positions[topPos + 1] = y;
@@ -317,10 +326,6 @@ const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
       nodeX[idx] = x;
       nodeY[idx] = y;
       nodeZ[idx] = z;
-
-      positions[bottomPos] = x;
-      positions[bottomPos + 1] = baseY;
-      positions[bottomPos + 2] = z;
 
       // ── Per-vertex colour ──
       let c: THREE.Color;
@@ -336,12 +341,28 @@ const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
       colors[topPos] = c.r;
       colors[topPos + 1] = c.g;
       colors[topPos + 2] = c.b;
-
-      colors[bottomPos] = c.r * 0.45;
-      colors[bottomPos + 1] = c.g * 0.45;
-      colors[bottomPos + 2] = c.b * 0.45;
     }
   }
+
+  // ── Underside: one fan from the centre over the perimeter ring ──
+  // All three base shapes are convex about the origin, so a fan is valid, and it
+  // costs 4N triangles where a second full grid would cost 2N².
+  for (let i = 0; i < perimeter.length; i++) {
+    const top = perimeter[i];
+    const idx = bottomRingStart + i;
+    positions[idx * 3] = positions[top * 3];
+    positions[idx * 3 + 1] = baseY;
+    positions[idx * 3 + 2] = positions[top * 3 + 2];
+    colors[idx * 3] = colors[top * 3] * 0.45;
+    colors[idx * 3 + 1] = colors[top * 3 + 1] * 0.45;
+    colors[idx * 3 + 2] = colors[top * 3 + 2] * 0.45;
+  }
+  positions[bottomCenter * 3] = 0;
+  positions[bottomCenter * 3 + 1] = baseY;
+  positions[bottomCenter * 3 + 2] = 0;
+  colors[bottomCenter * 3] = 0.2;
+  colors[bottomCenter * 3 + 1] = 0.2;
+  colors[bottomCenter * 3 + 2] = 0.2;
 
   const indexValues: number[] = [];
 
@@ -356,29 +377,20 @@ const baseY = -Math.max(settings.baseDepth, 1) * settings.verticalScale;
     }
   }
 
-  // ── Bottom faces (reversed winding) ──
-  for (let row = 0; row < N - 1; row++) {
-    for (let col = 0; col < N - 1; col++) {
-      const tl = row * N + col + topVertexCount;
-      const tr = tl + 1;
-      const bl = tl + N;
-      const br = bl + 1;
-      indexValues.push(tl, tr, bl, tr, br, bl);
-    }
+  // ── Bottom faces ──
+  // (centre, ring[i], ring[i+1]) with the ring clockwise from above gives -Y.
+  for (let i = 0; i < perimeter.length; i++) {
+    const a = bottomRingStart + i;
+    const b = bottomRingStart + ((i + 1) % perimeter.length);
+    indexValues.push(bottomCenter, a, b);
   }
 
   // ── Side walls along the outer ring ──
-  const perimeter: number[] = [];
-  for (let col = 0; col < N; col++) perimeter.push(col);
-  for (let row = 1; row < N; row++) perimeter.push(row * N + (N - 1));
-  for (let col = N - 2; col >= 0; col--) perimeter.push((N - 1) * N + col);
-  for (let row = N - 2; row > 0; row--) perimeter.push(row * N);
-
   for (let i = 0; i < perimeter.length; i++) {
     const aTop = perimeter[i];
     const bTop = perimeter[(i + 1) % perimeter.length];
-    const aBottom = aTop + topVertexCount;
-    const bBottom = bTop + topVertexCount;
+    const aBottom = bottomRingStart + i;
+    const bBottom = bottomRingStart + ((i + 1) % perimeter.length);
     indexValues.push(aTop, bTop, aBottom, bTop, bBottom, aBottom);
   }
 
