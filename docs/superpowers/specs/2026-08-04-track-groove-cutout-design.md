@@ -78,9 +78,14 @@ export function buildCorridor(
 `sink` is backed by a uniform spatial hash of the centre-line segments so a lookup
 stays O(1) — it is called once per refined terrain vertex, up to ~66k times.
 
-The centre-line cleaning and station densification currently living in
-`trackBuilder` move here, and `trackBuilder` imports them. Both features need the
-same notion of "where the track runs", and having two would let them drift.
+The centre-line cleaning currently living in `trackBuilder` moves here, and
+`trackBuilder` imports it. Both features need the same notion of "where the track
+runs", and having two would let them drift.
+
+Station densification stays in `trackBuilder`. It exists to land points on terrain
+triangle edges and therefore depends on `TerrainSurface` — which does not exist yet
+at the moment the corridor is needed, since the corridor is an *input* to building
+that surface. Distance to a polyline needs no densification anyway.
 
 ### `src/utils/terrainBuilder.ts`
 
@@ -185,8 +190,13 @@ diverging.
 
 ## Testing
 
-`scripts/verify-groove.ts`, alongside the existing drape script and sharing its
-ray-casting approach. Added to `package.json` as `verify:groove`.
+Two scripts alongside the existing drape script, sharing its ray-casting approach:
+
+- `scripts/verify-corridor.ts` (`verify:corridor`) — pure geometry checks on
+  `Corridor.sink`, which needs no mesh.
+- `scripts/verify-terrain-solid.ts` (`verify:terrain`) — the mesh-level checks
+  below. Named for the solid rather than the groove because the manifold check
+  applies with and without a cut.
 
 1. **Depth.** Down the corridor centre, the carved surface sits `abs(offset)`
    below the uncarved surface, within 1e-3 scene units.
