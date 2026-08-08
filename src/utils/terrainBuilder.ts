@@ -147,8 +147,22 @@ function createTerrainSurface(
     const wc = (bx * pz - bz * px) / det;
     const wa = 1 - wb - wc;
 
+    // Clamp before blending, don't "simplify" this away: sampleY's fallback
+    // below calls this on the *nearest* triangle even when the search never
+    // finds one the point is strictly inside, and an unclamped barycentric
+    // blend extrapolates that triangle's plane — which can overshoot its own
+    // vertex range, arbitrarily far if the triangle happens to be thin or
+    // ill-conditioned. Task 4 carves against this sampler, so it must never
+    // hand back a height outside the range it was asked to interpolate. This
+    // is a no-op for points genuinely inside the triangle, where the weights
+    // are already >= 0.
+    const cwa = Math.max(0, wa);
+    const cwb = Math.max(0, wb);
+    const cwc = Math.max(0, wc);
+    const wSum = cwa + cwb + cwc || 1;
+
     return {
-      y: wa * nodeY[ia] + wb * nodeY[ib] + wc * nodeY[ic],
+      y: (cwa * nodeY[ia] + cwb * nodeY[ib] + cwc * nodeY[ic]) / wSum,
       outside: -Math.min(wa, wb, wc, 0),
     };
   };
