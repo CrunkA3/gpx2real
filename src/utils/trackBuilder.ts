@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { GPXTrack, TrackProfile } from '../types';
 import type { CoordSystem } from './coordTransform';
-import { geoToLocal } from './coordTransform';
+import { cleanCenterLine, type Vec2 } from './trackCorridor';
 import type { TerrainSurface } from './terrainBuilder';
 
 // ─── Colour palette for multiple tracks ──────────────────────────────
@@ -26,8 +26,6 @@ const TRACK_COLORS = [
  * keeps resting on the terrain when the exaggeration is changed.
  */
 
-/** GPS points closer than this to their predecessor are jitter, not detail. */
-const MIN_POINT_SPACING = 0.75;
 /** Upper bound on the gap between two cross-sections. */
 const MAX_STATION_SPACING = 20;
 /** Keeps the vertex count bounded on very long tracks. */
@@ -42,25 +40,7 @@ const EMBED_FACTOR = 0.05;
 /** How far below the surface an engraved groove begins, in band heights. */
 const GROOVE_DEPTH_FACTOR = 0.5;
 
-/** A point on the horizontal plane of the scene. */
-interface Vec2 {
-  x: number;
-  z: number;
-}
-
 // ─── Centre line ─────────────────────────────────────────────────────
-
-/** Track points as scene XZ, with GPS jitter removed. */
-function cleanCenterLine(track: GPXTrack, cs: CoordSystem): Vec2[] {
-  const out: Vec2[] = [];
-  for (const p of track.points) {
-    const [x, , z] = geoToLocal(cs, p.lat, p.lon, 0);
-    const prev = out[out.length - 1];
-    if (prev && Math.hypot(x - prev.x, z - prev.z) < MIN_POINT_SPACING) continue;
-    out.push({ x, z });
-  }
-  return out;
-}
 
 /**
  * Inserts the cross-section positions.
