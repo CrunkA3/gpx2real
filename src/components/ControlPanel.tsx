@@ -3,7 +3,6 @@ import type {
   BaseShape,
   GridResolution,
   TerrainStyle,
-  TrackProfile,
   WaypointShape,
 } from '../types';
 
@@ -148,16 +147,6 @@ export default function ControlPanel({ settings, onChange }: Props) {
           />
         </Row>
 
-        <Row label="Profile">
-          <select
-            value={settings.track.profile}
-            onChange={(e) => setTrack({ profile: e.target.value as TrackProfile })}
-          >
-            <option value="round">Round</option>
-            <option value="square">Square (printable)</option>
-            <option value="engraved">Engraved groove</option>
-          </select>
-        </Row>
       </Section>
 
       {/* ── Waypoints ── */}

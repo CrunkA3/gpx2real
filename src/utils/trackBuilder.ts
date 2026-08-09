@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { GPXTrack, TrackProfile } from '../types';
+import type { GPXTrack } from '../types';
 import type { CoordSystem } from './coordTransform';
 import { cleanCenterLine, type Vec2 } from './trackCorridor';
 import type { TerrainSurface } from './terrainBuilder';
@@ -32,13 +32,10 @@ const MAX_STATION_SPACING = 20;
 const MAX_STATIONS = 4000;
 /** Lateral subdivisions of a cross-section; the underside follows these. */
 const CROSS_SEGMENTS_FLAT = 4;
-const CROSS_SEGMENTS_ROUND = 8;
 /** Cap on how far a corner vertex is pushed out on tight switchbacks. */
 const MAX_MITER = 2;
 /** Underside sinks this fraction of the half-width below the terrain. */
 const EMBED_FACTOR = 0.05;
-/** How far below the surface an engraved groove begins, in band heights. */
-const GROOVE_DEPTH_FACTOR = 0.5;
 
 // ─── Centre line ─────────────────────────────────────────────────────
 
@@ -193,8 +190,7 @@ function ringArcs(K: number): number[][] {
 /**
  * One closed outline per station, in scene space.
  *
- * The top of every cross-section is level (a single height across the width, or
- * a symmetric dome for `round`); the bottom is sampled per lateral position, so
+ * The top of every cross-section is level; the bottom is sampled per lateral position, so
  * it beds into the slope. Nothing here is derived from the travel direction's
  * pitch, which is why the band no longer banks.
  */
@@ -202,15 +198,12 @@ function buildRings(
   stations: Vec2[],
   frames: Vec2[],
   surface: TerrainSurface,
-  profile: TrackProfile,
   halfWidth: number,
   height: number,
   offset: number,
 ): THREE.Vector3[][] {
-  const K = profile === 'round' ? CROSS_SEGMENTS_ROUND : CROSS_SEGMENTS_FLAT;
+  const K = CROSS_SEGMENTS_FLAT;
   const slots = ringSlots(K);
-  const engraved = profile === 'engraved';
-  const crown = profile === 'round' ? Math.min(halfWidth, height * 0.6) : 0;
   const embed = Math.max(0.05, halfWidth * EMBED_FACTOR);
   const minThickness = Math.max(0.05, height * 0.02);
 
@@ -231,20 +224,12 @@ function buildRings(
     }
 
     // ── One level reference height for the whole cross-section ──
-    // Raised profiles clear the highest ground under the band; the groove hangs
-    // off the lowest, so it stays visible as a recess everywhere.
-    const apexY = engraved
-      ? Math.min(...groundY) + offset - height * GROOVE_DEPTH_FACTOR
-      : Math.max(...groundY) + offset + height;
+    const apexY = Math.max(...groundY) + offset + height;
 
     const ring: THREE.Vector3[] = new Array(slots.size);
     for (let j = 0; j <= K; j++) {
-      const s = lateralParam(j, K);
-      const topY = crown > 0 ? apexY - crown + crown * Math.sqrt(Math.max(0, 1 - s * s)) : apexY;
-
-      const rawBottomY = engraved
-        ? groundY[j] + offset - height * (GROOVE_DEPTH_FACTOR + 1)
-        : groundY[j] - embed;
+      const topY = apexY;
+      const rawBottomY = groundY[j] - embed;
       // Steep cross-slopes (or a strongly negative offset) could otherwise push
       // the underside through the top and invert the winding.
       const bottomY = Math.min(rawBottomY, topY - minThickness);
@@ -346,7 +331,6 @@ export function buildTrackMesh(
   offset: number,
   width: number,
   trackIndex: number,
-  profile: TrackProfile,
   color?: number,
 ): THREE.Mesh {
   const halfWidth = Math.max(width, 0.1);
@@ -359,14 +343,14 @@ export function buildTrackMesh(
   if (stations.length < 2) return emptyMesh(trackIndex);
 
   const frames = lateralFrames(stations);
-  const rings = buildRings(stations, frames, surface, profile, halfWidth, height, offset);
+  const rings = buildRings(stations, frames, surface, halfWidth, height, offset);
 
-  const K = profile === 'round' ? CROSS_SEGMENTS_ROUND : CROSS_SEGMENTS_FLAT;
+  const K = CROSS_SEGMENTS_FLAT;
   const geo = buildGeometry(rings, K);
 
   const c = color ?? TRACK_COLORS[trackIndex % TRACK_COLORS.length];
   const mat = new THREE.MeshPhongMaterial({
-    color: profile === 'engraved' ? 0x552222 : c,
+    color: c,
     shininess: 80,
   });
 
@@ -383,7 +367,6 @@ export function buildAllTrackMeshes(
   cs: CoordSystem,
   offset: number,
   width: number,
-  profile: TrackProfile,
 ): THREE.Mesh[] {
-  return tracks.map((track, i) => buildTrackMesh(track, surface, cs, offset, width, i, profile));
+  return tracks.map((track, i) => buildTrackMesh(track, surface, cs, offset, width, i));
 }

@@ -10,7 +10,7 @@
  * Run with `npm run verify:track`.
  */
 import * as THREE from 'three';
-import type { BoundingBox, ElevationGrid, GPXTrack, TerrainSettings, TrackProfile } from '../src/types.ts';
+import type { BoundingBox, ElevationGrid, GPXTrack, TerrainSettings } from '../src/types.ts';
 import { buildTerrainMesh } from '../src/utils/terrainBuilder.ts';
 import { buildTrackMesh } from '../src/utils/trackBuilder.ts';
 import { geoToLocal, type CoordSystem } from '../src/utils/coordTransform.ts';
@@ -175,10 +175,9 @@ function fail(label: string, detail: string): void {
 function checkCase(
   style: TerrainSettings['style'],
   verticalScale: number,
-  profile: TrackProfile,
   baseShape: TerrainSettings['baseShape'],
 ): void {
-  const label = `${style} / vScale=${verticalScale} / ${profile} / ${baseShape}`;
+  const label = `${style} / vScale=${verticalScale} / ${baseShape}`;
   const grid = makeGrid();
   const settings: TerrainSettings = {
     style,
@@ -201,7 +200,7 @@ function checkCase(
 
   for (const track of [makeWindingTrack(), makeStraightTrack()]) {
     const straight = track.name === 'straight';
-    const trackMesh = buildTrackMesh(track, surface, cs, 0, WIDTH_M, 0, profile);
+    const trackMesh = buildTrackMesh(track, surface, cs, 0, WIDTH_M, 0);
     trackMesh.updateMatrixWorld(true);
 
     for (let s = 1; s < 200; s++) {
@@ -228,17 +227,15 @@ function checkCase(
         fail(label, `top ray missed the band at ${track.name} t=${t.toFixed(3)}`);
         return;
       }
-      // Mirrored positions must match: level for `square`, symmetric for `round`.
+      // Mirrored positions must match for the flat profile.
       let tilt = Math.abs(topL - topR);
 
-      if (profile === 'square') {
-        const topC = castDown(trackMesh, centre.x, centre.z);
-        if (topC === null) {
-          fail(label, `top ray missed the centre at ${track.name} t=${t.toFixed(3)}`);
-          return;
-        }
-        tilt = Math.max(tilt, Math.abs(topC - topL));
+      const topC = castDown(trackMesh, centre.x, centre.z);
+      if (topC === null) {
+        fail(label, `top ray missed the centre at ${track.name} t=${t.toFixed(3)}`);
+        return;
       }
+      tilt = Math.max(tilt, Math.abs(topC - topL));
 
       if (straight) worstTilt = Math.max(worstTilt, tilt);
       else worstCurvedTilt = Math.max(worstCurvedTilt, tilt);
@@ -247,7 +244,7 @@ function checkCase(
     // On the winding track a probe line is not parallel to the mesh's own
     // cross-section, so ray-casting picks up a ruled-surface difference that
     // is not roll. Check the invariant on the triangles directly instead.
-    if (!straight && profile === 'square') {
+    if (!straight) {
       const rolled = countRolledTopFaces(trackMesh);
       if (rolled > CAP_TRIANGLE_ALLOWANCE) {
         fail(label, `${rolled} upward faces have no level cross-track edge`);
@@ -284,7 +281,7 @@ function checkSwitchback(): void {
     baseShape: 'square',
     baseDepth: 120,
   });
-  const mesh = buildTrackMesh(makeSwitchbackTrack(), surface, cs, 0, WIDTH_M, 0, 'square');
+  const mesh = buildTrackMesh(makeSwitchbackTrack(), surface, cs, 0, WIDTH_M, 0);
   const pos = mesh.geometry.getAttribute('position');
   const idx = mesh.geometry.getIndex();
   if (!idx) return fail('hairpin', 'geometry has no index');
@@ -312,13 +309,11 @@ function checkSwitchback(): void {
 console.log('Track draping / levelness checks\n');
 for (const style of ['original', 'lowpoly', 'layers'] as const) {
   for (const verticalScale of [1, 2.5]) {
-    for (const profile of ['square', 'round'] as const) {
-      checkCase(style, verticalScale, profile, 'square');
-    }
+    checkCase(style, verticalScale, 'square');
   }
 }
-checkCase('original', 1.5, 'square', 'round');
-checkCase('original', 1.5, 'square', 'hex');
+checkCase('original', 1.5, 'round');
+checkCase('original', 1.5, 'hex');
 checkSwitchback();
 
 console.log('');
