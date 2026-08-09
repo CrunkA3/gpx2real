@@ -177,7 +177,7 @@ function checkCase(
   verticalScale: number,
   baseShape: TerrainSettings['baseShape'],
 ): void {
-  const label = `${style} / vScale=${verticalScale} / square / ${baseShape}`;
+  const label = `${style} / vScale=${verticalScale} / ${baseShape}`;
   const grid = makeGrid();
   const settings: TerrainSettings = {
     style,
