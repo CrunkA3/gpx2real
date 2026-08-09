@@ -30,7 +30,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   track: {
     offset: 0,
     width: 10,
-    profile: 'square',
   },
   waypoint: {
     shape: 'sphere',

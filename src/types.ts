@@ -37,7 +37,6 @@ export type TerrainStyle = 'original' | 'lowpoly' | 'layers';
 export type GridResolution = 16 | 32 | 64;
 export type BaseShape = 'square' | 'hex' | 'round';
 export type WaypointShape = 'sphere' | 'cylinder' | 'box';
-export type TrackProfile = 'round' | 'square' | 'engraved';
 export type ExportFormat = 'glb' | 'stl' | 'obj';
 export type ExportScope = 'all' | 'terrain' | 'tracks' | 'waypoints';
 
@@ -60,7 +59,6 @@ export interface TrackSettings {
   offset: number;
   /** Half-width of the track band in metres; also its height */
   width: number;
-  profile: TrackProfile;
 }
 
 export interface WaypointSettings {
