@@ -134,7 +134,7 @@ export default function App() {
         <div className="brand">
           <span className="brand-icon">🗺</span>
           <span className="brand-name">gpx2real</span>
-          <span className="brand-sub">3D GPX Terrain Viewer</span>
+          <span className="brand-sub">3D GPX Terrain Generator</span>
         </div>
 
         <div className="top-bar-actions">
